@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"regexp"
 )
@@ -59,10 +58,6 @@ func ExtractImagesLinks(content []byte, n int) []string {
 	return result
 }
 
-func ReadContent() ([]byte, error) {
-	return ioutil.ReadFile("../stubs/stub1.html")
-}
-
 func DownloadImages(links []string, d Downloader) ([]Image, error) {
 	var images []Image
 
@@ -81,7 +76,7 @@ func DownloadImages(links []string, d Downloader) ([]Image, error) {
 func StartDownload(d Downloader) ([]Image, error) {
 	amount := 10
 
-	webContent, err := ReadContent()
+	webContent, err := d.Download("http://icanhas.cheezburger.com/")
 	if err != nil {
 		return nil, err
 	}

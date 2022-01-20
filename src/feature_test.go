@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"testing"
@@ -53,7 +54,7 @@ func TestAnErrorIsReturnedWhenHTTPContentCannotBeDownloaded(t *testing.T) {
 }
 
 func TestThatImagesLinksCanBeFoundInAWebContent(t *testing.T) {
-	stub, err := ReadContent()
+	stub, err := homePage()
 	if err != nil {
 		assert.Fail(t, err.Error())
 	}
@@ -71,7 +72,7 @@ func TestThatImagesLinksCanBeFoundInAWebContent(t *testing.T) {
 }
 
 func TestThatImagesCanBeDownloaded(t *testing.T) {
-	webContent, err := ReadContent()
+	webContent, err := homePage()
 	if err != nil {
 		assert.Fail(t, err.Error())
 	}
@@ -129,9 +130,17 @@ type mockReader struct {
 }
 
 func (d mockReader) Read(src string) ([]byte, error) {
+	if src == "http://icanhas.cheezburger.com/" {
+		return homePage()
+	}
+
 	if len(d.b) == 0 {
 		return nil, fmt.Errorf("empty content")
 	}
 
 	return d.b, nil
+}
+
+func homePage() ([]byte, error) {
+	return ioutil.ReadFile("../stubs/stub1.html")
 }

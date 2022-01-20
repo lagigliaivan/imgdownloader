@@ -9,7 +9,7 @@ func main() {
 	err := AppRun()
 
 	if err != nil {
-		fmt.Errorf(err.Error())
+		fmt.Printf(err.Error())
 		os.Exit(-1)
 	}
 }
