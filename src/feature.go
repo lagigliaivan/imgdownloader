@@ -7,21 +7,15 @@ import (
 )
 
 type (
-	Reader interface {
-		Read(src string) ([]byte, error)
-	}
-
-	Downloader struct {
-		src Reader
+	Downloader interface {
+		Download(src string) ([]byte, error)
 	}
 
 	Image []byte
 )
 
 func AppRun(imgsQuantity int) error {
-	d := Downloader{
-		src: client{},
-	}
+	d := client{}
 
 	images, err := StartDownload(d, imgsQuantity)
 	if err != nil {
@@ -40,19 +34,15 @@ func AppRun(imgsQuantity int) error {
 	return nil
 }
 
-func (d Downloader) Download(url string) ([]byte, error) {
-	return d.src.Read(url)
-}
-
 func ExtractImagesLinks(content []byte, n int) []string {
-	urlGroup := 1
+	url := 1
 	var result []string
 	r := regexp.MustCompile(`<img class="resp-media.*" src="data:image.* data-src="(?P<url>https://.*?)" .*`)
 
 	links := r.FindAllString(string(content), n)
 	for _, s := range links {
 		l := r.FindStringSubmatch(s)
-		result = append(result, l[urlGroup])
+		result = append(result, l[url])
 	}
 
 	return result
@@ -80,9 +70,25 @@ func StartDownload(d Downloader, imgQuantity int) ([]Image, error) {
 	}
 
 	links := ExtractImagesLinks(webContent, imgQuantity)
+
+	for i := 2; len(links) < imgQuantity; i++ {
+		fmt.Printf("getting page %d\n", i)
+		webContent, err := d.Download(fmt.Sprintf("http://icanhas.cheezburger.com/page/%d", i))
+		if err != nil {
+			return nil, err
+		}
+		l := ExtractImagesLinks(webContent, (imgQuantity - len(links)))
+
+		links = append(links, l...)
+	}
+
 	images, err := DownloadImages(links, d)
 
 	return images, err
+}
+
+func ImagesLinks() {
+
 }
 
 func Save(images []Image, dir string) ([]string, error) {

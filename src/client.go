@@ -9,7 +9,7 @@ import (
 type client struct {
 }
 
-func (c client) Read(u string) ([]byte, error) {
+func (c client) Download(u string) ([]byte, error) {
 	_, err := url.Parse(u)
 	if err != nil {
 		return nil, err

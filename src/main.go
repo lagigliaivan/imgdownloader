@@ -10,7 +10,7 @@ import (
 func main() {
 	var amount string
 
-	flag.StringVar(&amount, "c", "10", "Default quantity 10")
+	flag.StringVar(&amount, "amount", "10", "Default quantity 10")
 	flag.Parse()
 
 	q, err := strconv.Atoi(amount)

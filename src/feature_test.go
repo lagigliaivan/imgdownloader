@@ -54,7 +54,7 @@ func TestAnErrorIsReturnedWhenHTTPContentCannotBeDownloaded(t *testing.T) {
 }
 
 func TestThatImagesLinksCanBeFoundInAWebContent(t *testing.T) {
-	stub, err := homePageStub()
+	stub, err := homePageStub(1)
 	if err != nil {
 		assert.Fail(t, err.Error())
 	}
@@ -72,7 +72,7 @@ func TestThatImagesLinksCanBeFoundInAWebContent(t *testing.T) {
 }
 
 func TestThatImagesCanBeDownloaded(t *testing.T) {
-	webContent, err := homePageStub()
+	webContent, err := homePageStub(1)
 	if err != nil {
 		assert.Fail(t, err.Error())
 	}
@@ -86,23 +86,24 @@ func TestThatImagesCanBeDownloaded(t *testing.T) {
 }
 
 func TestThat10ImagesCanBeDownloaded(t *testing.T) {
-	amount := 10
+	quantity := 10
 
-	images, err := StartDownload(mock(img), amount)
+	images, err := StartDownload(mock(img), quantity)
 
-	assert.True(t, len(images) == amount)
+	assert.True(t, len(images) == quantity)
 	assert.NoError(t, err)
 }
 
 //TODO: avoid accessing disk for testing purposes
 func TestThatImagesAreSavedInADirectory(t *testing.T) {
-	amount := 10
+	quantity := 10
 	dir := "./images"
 
-	images, err := StartDownload(mock(img), amount)
+	images, err := StartDownload(mock(img), quantity)
 
 	paths, err := Save(images, dir)
 
+	//checking if files were properly created
 	for i, p := range paths {
 		if _, err := os.Stat(p); os.IsNotExist(err) {
 			assert.Fail(t, err.Error())
@@ -113,12 +114,12 @@ func TestThatImagesAreSavedInADirectory(t *testing.T) {
 		}
 	}
 
-	assert.True(t, len(images) == amount)
-	assert.True(t, len(paths) == amount)
+	assert.True(t, len(images) == quantity)
+	assert.True(t, len(paths) == quantity)
 	assert.NoError(t, err)
 }
 
-func TestThatTheAmountOfImagesToBeDownloadesCanBeSpecified(t *testing.T) {
+func TestThatTheQuantityOfImagesToBeDownloadesCanBeSpecified(t *testing.T) {
 	cases := []struct {
 		desc         string
 		imgsQuantity int
@@ -138,20 +139,41 @@ func TestThatTheAmountOfImagesToBeDownloadesCanBeSpecified(t *testing.T) {
 	}
 }
 
-func mock(returnValue []byte) Downloader {
-	return Downloader{
-		src: mockReader{
-			b: returnValue,
-		}}
+func TestThatIfImagesQuantityToDownloadCannotBeFulfilledThenSearchTheNextPage(t *testing.T) {
+	quantity := 50
+	d := mock(img)
+
+	images, err := StartDownload(d, quantity)
+
+	assert.True(t, len(images) == quantity)
+	assert.True(t, d.lastPage > 1)
+	assert.NoError(t, err)
+}
+
+func mock(returnValue []byte) *mockReader {
+	return &mockReader{
+		b: returnValue,
+	}
 }
 
 type mockReader struct {
-	b []byte
+	b        []byte
+	lastPage int
 }
 
-func (d mockReader) Read(src string) ([]byte, error) {
+func (d *mockReader) Download(src string) ([]byte, error) {
 	if src == "http://icanhas.cheezburger.com/" {
-		return homePageStub()
+		return homePageStub(1)
+	}
+
+	if src == "http://icanhas.cheezburger.com/page/2" {
+		d.lastPage = 2
+		return homePageStub(2)
+	}
+
+	if src == "http://icanhas.cheezburger.com/page/3" {
+		d.lastPage = 3
+		return homePageStub(3)
 	}
 
 	if len(d.b) == 0 {
@@ -161,6 +183,8 @@ func (d mockReader) Read(src string) ([]byte, error) {
 	return d.b, nil
 }
 
-func homePageStub() ([]byte, error) {
-	return ioutil.ReadFile("../stubs/stub1.html")
+func homePageStub(page int) ([]byte, error) {
+	pname := fmt.Sprintf("../stubs/stub%d.html", page)
+
+	return ioutil.ReadFile(pname)
 }
