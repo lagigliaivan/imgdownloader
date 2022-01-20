@@ -54,7 +54,7 @@ func TestAnErrorIsReturnedWhenHTTPContentCannotBeDownloaded(t *testing.T) {
 }
 
 func TestThatImagesLinksCanBeFoundInAWebContent(t *testing.T) {
-	stub, err := homePage()
+	stub, err := homePageStub()
 	if err != nil {
 		assert.Fail(t, err.Error())
 	}
@@ -72,7 +72,7 @@ func TestThatImagesLinksCanBeFoundInAWebContent(t *testing.T) {
 }
 
 func TestThatImagesCanBeDownloaded(t *testing.T) {
-	webContent, err := homePage()
+	webContent, err := homePageStub()
 	if err != nil {
 		assert.Fail(t, err.Error())
 	}
@@ -88,7 +88,7 @@ func TestThatImagesCanBeDownloaded(t *testing.T) {
 func TestThat10ImagesCanBeDownloaded(t *testing.T) {
 	amount := 10
 
-	images, err := StartDownload(mock(img))
+	images, err := StartDownload(mock(img), amount)
 
 	assert.True(t, len(images) == amount)
 	assert.NoError(t, err)
@@ -99,7 +99,7 @@ func TestThatImagesAreSavedInADirectory(t *testing.T) {
 	amount := 10
 	dir := "./images"
 
-	images, err := StartDownload(mock(img))
+	images, err := StartDownload(mock(img), amount)
 
 	paths, err := Save(images, dir)
 
@@ -118,6 +118,26 @@ func TestThatImagesAreSavedInADirectory(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestThatTheAmountOfImagesToBeDownloadesCanBeSpecified(t *testing.T) {
+	cases := []struct {
+		desc         string
+		imgsQuantity int
+	}{
+		{"Test downloading 1 image", 1},
+		{"Test downloading 2 images", 2},
+		{"Test downloading 3 images", 3},
+		{"Test downloading 11 images", 11},
+	}
+	for _, tc := range cases {
+		images, err := StartDownload(mock(img), tc.imgsQuantity)
+		if err != nil {
+			assert.Fail(t, err.Error())
+		}
+
+		assert.True(t, len(images) == tc.imgsQuantity)
+	}
+}
+
 func mock(returnValue []byte) Downloader {
 	return Downloader{
 		src: mockReader{
@@ -131,7 +151,7 @@ type mockReader struct {
 
 func (d mockReader) Read(src string) ([]byte, error) {
 	if src == "http://icanhas.cheezburger.com/" {
-		return homePage()
+		return homePageStub()
 	}
 
 	if len(d.b) == 0 {
@@ -141,6 +161,6 @@ func (d mockReader) Read(src string) ([]byte, error) {
 	return d.b, nil
 }
 
-func homePage() ([]byte, error) {
+func homePageStub() ([]byte, error) {
 	return ioutil.ReadFile("../stubs/stub1.html")
 }

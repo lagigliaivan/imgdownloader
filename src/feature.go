@@ -18,12 +18,12 @@ type (
 	Image []byte
 )
 
-func AppRun() error {
+func AppRun(imgsQuantity int) error {
 	d := Downloader{
 		src: client{},
 	}
 
-	images, err := StartDownload(d)
+	images, err := StartDownload(d, imgsQuantity)
 	if err != nil {
 		return err
 	}
@@ -73,15 +73,13 @@ func DownloadImages(links []string, d Downloader) ([]Image, error) {
 	return images, nil
 }
 
-func StartDownload(d Downloader) ([]Image, error) {
-	amount := 10
-
+func StartDownload(d Downloader, imgQuantity int) ([]Image, error) {
 	webContent, err := d.Download("http://icanhas.cheezburger.com/")
 	if err != nil {
 		return nil, err
 	}
 
-	links := ExtractImagesLinks(webContent, amount)
+	links := ExtractImagesLinks(webContent, imgQuantity)
 	images, err := DownloadImages(links, d)
 
 	return images, err
