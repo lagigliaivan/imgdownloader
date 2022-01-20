@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"io/ioutil"
+	"os"
 	"regexp"
 )
 
@@ -39,11 +41,11 @@ func NewImage(data []byte) (image.Image, error) {
 	return imageData, err
 }
 
-func ExtractLinks(content []byte) []string {
+func ExtractImagesLinks(content []byte, n int) []string {
 	var result []string
 	r := regexp.MustCompile(`<img class="resp-media.*" src="data:image.* data-src="(?P<url>https://.*?)" .*`)
 
-	links := r.FindAllString(string(content), -1)
+	links := r.FindAllString(string(content), n)
 	for _, s := range links {
 		l := r.FindStringSubmatch(s)
 		result = append(result, l[0])
@@ -75,4 +77,49 @@ func DownloadImages(links []string, d Downloader) ([]image.Image, error) {
 	}
 
 	return images, nil
+}
+
+func startDownload(d Downloader) ([]image.Image, error) {
+	amount := 10
+
+	webContent, err := ReadContent()
+	if err != nil {
+		return nil, err
+	}
+
+	links := ExtractImagesLinks(webContent, amount)
+	images, err := DownloadImages(links, d)
+
+	return images, err
+}
+
+func save(images []image.Image, dir string) ([]string, error) {
+	var filePaths []string
+
+	dstPath := fmt.Sprintf("./%s", dir)
+
+	err := os.Mkdir(dstPath, 0755)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, img := range images {
+		filePath := fmt.Sprintf("%s/%d.jpg", dstPath, i)
+
+		f, err := os.Create(filePath)
+		if err != nil {
+			return nil, err
+		}
+
+		err = png.Encode(f, img)
+		if err != nil {
+			return nil, err
+		}
+
+		f.Close()
+
+		filePaths = append(filePaths, filePath)
+	}
+
+	return filePaths, nil
 }
