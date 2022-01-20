@@ -2,19 +2,23 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"log"
 	"os"
 )
 
 func main() {
-	var amount int
+	appConfig := Config{
+		D:       imageDownloader{},
+		BaseURL: "http://icanhas.cheezburger.com/",
+		DstDir:  "./images",
+	}
 
-	flag.IntVar(&amount, "amount", 10, "Default quantity 10")
+	flag.IntVar(&appConfig.Quantity, "amount", 10, "Default quantity 10")
 	flag.Parse()
 
-	err := AppRun(amount)
+	err := RunApp(appConfig)
 	if err != nil {
-		fmt.Printf(err.Error())
+		log.Fatal(err.Error())
 		os.Exit(-1)
 	}
 }

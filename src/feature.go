@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 )
@@ -12,26 +13,65 @@ type (
 	}
 
 	Image []byte
+
+	Config struct {
+		D        Downloader
+		BaseURL  string
+		DstDir   string
+		Quantity int
+	}
 )
 
-func AppRun(imgsQuantity int) error {
-	d := imageDownloader{}
-
-	images, err := StartDownload(d, imgsQuantity)
+func RunApp(c Config) error {
+	images, err := StartImagesDownload(c.D, c.BaseURL, c.Quantity)
 	if err != nil {
 		return err
 	}
 
-	paths, err := Save(images, "./images")
+	paths, err := SaveImages(images, c.DstDir)
 	if err != nil {
 		return err
 	}
 
 	for _, p := range paths {
-		fmt.Printf("%s\n", p)
+		log.Printf("%s\n", p)
 	}
 
 	return nil
+}
+
+func StartImagesDownload(d Downloader, baseURL string, imgQuantity int) ([]Image, error) {
+	const secondPage = 2
+
+	links, err := ImagesLinks(d, baseURL, imgQuantity)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := secondPage; len(links) < imgQuantity; i++ {
+		log.Printf("getting page %d\n", i)
+
+		remainingImages := (imgQuantity - len(links))
+
+		l, err := ImagesLinks(d, fmt.Sprintf("%s/page/%d", baseURL, i), remainingImages)
+		if err != nil {
+			return nil, err
+		}
+
+		links = append(links, l...)
+	}
+
+	return DownloadImages(links, d)
+}
+
+func ImagesLinks(d Downloader, url string, quantity int) ([]string, error) {
+	webContent, err := d.Download(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return ExtractImagesLinks(webContent, quantity), nil
+
 }
 
 func ExtractImagesLinks(content []byte, n int) []string {
@@ -63,31 +103,7 @@ func DownloadImages(links []string, d Downloader) ([]Image, error) {
 	return images, nil
 }
 
-func StartDownload(d Downloader, imgQuantity int) ([]Image, error) {
-	webContent, err := d.Download("http://icanhas.cheezburger.com/")
-	if err != nil {
-		return nil, err
-	}
-
-	links := ExtractImagesLinks(webContent, imgQuantity)
-
-	for i := 2; len(links) < imgQuantity; i++ {
-		fmt.Printf("getting page %d\n", i)
-		webContent, err := d.Download(fmt.Sprintf("http://icanhas.cheezburger.com/page/%d", i))
-		if err != nil {
-			return nil, err
-		}
-		l := ExtractImagesLinks(webContent, (imgQuantity - len(links)))
-
-		links = append(links, l...)
-	}
-
-	images, err := DownloadImages(links, d)
-
-	return images, err
-}
-
-func Save(images []Image, dir string) ([]string, error) {
+func SaveImages(images []Image, dir string) ([]string, error) {
 	var filePaths []string
 
 	dstPath := fmt.Sprintf("./%s", dir)
