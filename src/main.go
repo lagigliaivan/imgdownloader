@@ -1,6 +1,15 @@
 package main
 
+import (
+	"fmt"
+	"os"
+)
+
 func main() {
-	d := Downloader{}
-	startDownload(d)
+	err := AppRun()
+
+	if err != nil {
+		fmt.Errorf(err.Error())
+		os.Exit(-1)
+	}
 }

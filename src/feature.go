@@ -1,66 +1,70 @@
 package main
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
-	"image"
-	"image/png"
 	"io/ioutil"
 	"os"
 	"regexp"
 )
 
-type source string
+type (
+	Reader interface {
+		Read(src string) ([]byte, error)
+	}
 
-type Reader interface {
-	Read(source) []byte
-}
+	Downloader struct {
+		src Reader
+	}
 
-type Downloader struct {
-	src Reader
+	Image []byte
+)
+
+func AppRun() error {
+	d := Downloader{
+		src: client{},
+	}
+
+	images, err := StartDownload(d)
+	if err != nil {
+		return err
+	}
+
+	paths, err := Save(images, "./images")
+	if err != nil {
+		return err
+	}
+
+	for _, p := range paths {
+		fmt.Printf("%s\n", p)
+	}
+
+	return nil
 }
 
 func (d Downloader) Download(url string) ([]byte, error) {
-	r := d.src.Read(source(url))
-	if len(r) <= 0 {
-		return nil, errors.New("empty content")
-	}
-
-	return r, nil
-}
-
-func NewImage(data []byte) (image.Image, error) {
-	r := bytes.NewReader(data)
-
-	imageData, err := png.Decode(r)
-	if err != nil {
-		return nil, err
-	}
-
-	return imageData, err
+	return d.src.Read(url)
 }
 
 func ExtractImagesLinks(content []byte, n int) []string {
+	urlGroup := 1
 	var result []string
 	r := regexp.MustCompile(`<img class="resp-media.*" src="data:image.* data-src="(?P<url>https://.*?)" .*`)
 
 	links := r.FindAllString(string(content), n)
 	for _, s := range links {
 		l := r.FindStringSubmatch(s)
-		result = append(result, l[0])
+		result = append(result, l[urlGroup])
 	}
 
 	return result
 }
 
 func ReadContent() ([]byte, error) {
-	stub, err := ioutil.ReadFile("../stubs/stub1.html")
-	return stub, err
+	return ioutil.ReadFile("../stubs/stub1.html")
 }
 
-func DownloadImages(links []string, d Downloader) ([]image.Image, error) {
-	var images []image.Image
+func DownloadImages(links []string, d Downloader) ([]Image, error) {
+	var images []Image
 
 	for _, l := range links {
 		content, err := d.Download(l)
@@ -68,18 +72,13 @@ func DownloadImages(links []string, d Downloader) ([]image.Image, error) {
 			return nil, err
 		}
 
-		image, err := NewImage(content)
-		if err != nil {
-			return nil, err
-		}
-
-		images = append(images, image)
+		images = append(images, Image(content))
 	}
 
 	return images, nil
 }
 
-func startDownload(d Downloader) ([]image.Image, error) {
+func StartDownload(d Downloader) ([]Image, error) {
 	amount := 10
 
 	webContent, err := ReadContent()
@@ -93,7 +92,7 @@ func startDownload(d Downloader) ([]image.Image, error) {
 	return images, err
 }
 
-func save(images []image.Image, dir string) ([]string, error) {
+func Save(images []Image, dir string) ([]string, error) {
 	var filePaths []string
 
 	dstPath := fmt.Sprintf("./%s", dir)
@@ -104,19 +103,18 @@ func save(images []image.Image, dir string) ([]string, error) {
 	}
 
 	for i, img := range images {
-		filePath := fmt.Sprintf("%s/%d.jpg", dstPath, i)
+		filePath := fmt.Sprintf("%s/%d.jpg", dstPath, i+1)
 
 		f, err := os.Create(filePath)
 		if err != nil {
 			return nil, err
 		}
+		defer f.Close()
 
-		err = png.Encode(f, img)
+		_, err = f.Write(img)
 		if err != nil {
 			return nil, err
 		}
-
-		f.Close()
 
 		filePaths = append(filePaths, filePath)
 	}

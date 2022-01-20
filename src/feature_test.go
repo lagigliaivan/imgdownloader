@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/hex"
+	"fmt"
+	"net/url"
 	"os"
 	"testing"
 
@@ -37,9 +39,7 @@ func TestThatHTTPContentCanBeDownloaded(t *testing.T) {
 	content, err := d.Download(url)
 	assert.NoError(t, err)
 
-	image, err := NewImage(content)
-
-	assert.NotNil(t, image)
+	assert.NotEmpty(t, content)
 	assert.NoError(t, err)
 }
 
@@ -59,6 +59,11 @@ func TestThatImagesLinksCanBeFoundInAWebContent(t *testing.T) {
 	}
 
 	links := ExtractImagesLinks(stub, all)
+
+	for _, l := range links {
+		_, err := url.Parse(l)
+		assert.NoError(t, err)
+	}
 
 	assert.NotEmpty(t, links)
 	assert.NoError(t, err)
@@ -82,7 +87,7 @@ func TestThatImagesCanBeDownloaded(t *testing.T) {
 func TestThat10ImagesCanBeDownloaded(t *testing.T) {
 	amount := 10
 
-	images, err := startDownload(mock(img))
+	images, err := StartDownload(mock(img))
 
 	assert.True(t, len(images) == amount)
 	assert.NoError(t, err)
@@ -93,13 +98,17 @@ func TestThatImagesAreSavedInADirectory(t *testing.T) {
 	amount := 10
 	dir := "./images"
 
-	images, err := startDownload(mock(img))
+	images, err := StartDownload(mock(img))
 
-	paths, err := save(images, dir)
+	paths, err := Save(images, dir)
 
-	for _, p := range paths {
+	for i, p := range paths {
 		if _, err := os.Stat(p); os.IsNotExist(err) {
 			assert.Fail(t, err.Error())
+		}
+		name := fmt.Sprintf("./%s/%d.jpg", dir, i+1)
+		if p != name {
+			assert.Fail(t, fmt.Sprintf("image %s is not well named: %s\n", p, name))
 		}
 	}
 
@@ -119,6 +128,10 @@ type mockReader struct {
 	b []byte
 }
 
-func (d mockReader) Read(src source) []byte {
-	return d.b
+func (d mockReader) Read(src string) ([]byte, error) {
+	if len(d.b) == 0 {
+		return nil, fmt.Errorf("empty content")
+	}
+
+	return d.b, nil
 }
