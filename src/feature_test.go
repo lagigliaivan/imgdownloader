@@ -100,7 +100,7 @@ func TestThatImagesAreSavedInADirectory(t *testing.T) {
 	quantity := 10
 	dir := "./images"
 
-	images, err := StartImagesDownload(mock(img), baseURL, quantity)
+	images, _ := StartImagesDownload(mock(img), baseURL, quantity)
 
 	paths, err := SaveImages(images, dir)
 
