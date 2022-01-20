@@ -6,10 +6,10 @@ import (
 	"net/url"
 )
 
-type client struct {
+type imageDownloader struct {
 }
 
-func (c client) Read(u string) ([]byte, error) {
+func (c imageDownloader) Download(u string) ([]byte, error) {
 	_, err := url.Parse(u)
 	if err != nil {
 		return nil, err

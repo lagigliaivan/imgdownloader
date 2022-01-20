@@ -2,57 +2,87 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 )
 
 type (
-	Reader interface {
-		Read(src string) ([]byte, error)
-	}
-
-	Downloader struct {
-		src Reader
+	Downloader interface {
+		Download(src string) ([]byte, error)
 	}
 
 	Image []byte
+
+	Config struct {
+		D        Downloader
+		BaseURL  string
+		DstDir   string
+		Quantity int
+	}
 )
 
-func AppRun() error {
-	d := Downloader{
-		src: client{},
-	}
-
-	images, err := StartDownload(d)
+func RunApp(c Config) error {
+	images, err := StartImagesDownload(c.D, c.BaseURL, c.Quantity)
 	if err != nil {
 		return err
 	}
 
-	paths, err := Save(images, "./images")
+	paths, err := SaveImages(images, c.DstDir)
 	if err != nil {
 		return err
 	}
 
 	for _, p := range paths {
-		fmt.Printf("%s\n", p)
+		log.Printf("%s\n", p)
 	}
 
 	return nil
 }
 
-func (d Downloader) Download(url string) ([]byte, error) {
-	return d.src.Read(url)
+func StartImagesDownload(d Downloader, baseURL string, imgQuantity int) ([]Image, error) {
+	const secondPage = 2
+
+	links, err := ImagesLinks(d, baseURL, imgQuantity)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := secondPage; len(links) < imgQuantity; i++ {
+		log.Printf("getting page %d\n", i)
+
+		remainingImages := (imgQuantity - len(links))
+
+		l, err := ImagesLinks(d, fmt.Sprintf("%s/page/%d", baseURL, i), remainingImages)
+		if err != nil {
+			return nil, err
+		}
+
+		links = append(links, l...)
+	}
+
+	return DownloadImages(links, d)
+}
+
+func ImagesLinks(d Downloader, url string, quantity int) ([]string, error) {
+	webContent, err := d.Download(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return ExtractImagesLinks(webContent, quantity), nil
+
 }
 
 func ExtractImagesLinks(content []byte, n int) []string {
-	urlGroup := 1
+	url := 1
 	var result []string
 	r := regexp.MustCompile(`<img class="resp-media.*" src="data:image.* data-src="(?P<url>https://.*?)" .*`)
 
 	links := r.FindAllString(string(content), n)
 	for _, s := range links {
 		l := r.FindStringSubmatch(s)
-		result = append(result, l[urlGroup])
+		result = append(result, l[url])
 	}
 
 	return result
@@ -73,21 +103,7 @@ func DownloadImages(links []string, d Downloader) ([]Image, error) {
 	return images, nil
 }
 
-func StartDownload(d Downloader) ([]Image, error) {
-	amount := 10
-
-	webContent, err := d.Download("http://icanhas.cheezburger.com/")
-	if err != nil {
-		return nil, err
-	}
-
-	links := ExtractImagesLinks(webContent, amount)
-	images, err := DownloadImages(links, d)
-
-	return images, err
-}
-
-func Save(images []Image, dir string) ([]string, error) {
+func SaveImages(images []Image, dir string) ([]string, error) {
 	var filePaths []string
 
 	dstPath := fmt.Sprintf("./%s", dir)
