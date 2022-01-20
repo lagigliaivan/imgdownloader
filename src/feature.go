@@ -15,7 +15,7 @@ type (
 )
 
 func AppRun(imgsQuantity int) error {
-	d := client{}
+	d := imageDownloader{}
 
 	images, err := StartDownload(d, imgsQuantity)
 	if err != nil {
@@ -85,10 +85,6 @@ func StartDownload(d Downloader, imgQuantity int) ([]Image, error) {
 	images, err := DownloadImages(links, d)
 
 	return images, err
-}
-
-func ImagesLinks() {
-
 }
 
 func Save(images []Image, dir string) ([]string, error) {
