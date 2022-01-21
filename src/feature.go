@@ -42,7 +42,7 @@ func RunApp(c Config) error {
 	}
 
 	log.Printf("Parsing images links...\n")
-	links, err = c.Extractor.ImagesLinks(c.DLoader, c.BaseURL, c.ImgQuantity)
+	links, err = c.Extractor.ImagesData(c.DLoader, c.BaseURL, c.ImgQuantity)
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func (ext ImgLinksExtractor) links(content []byte, quantity int) []string {
 	return ext.r.FindAllString(string(content), quantity)
 }
 
-func (ext ImgLinksExtractor) ImagesLinks(d Downloader, url string, n int) ([]string, error) {
+func (ext ImgLinksExtractor) ImagesData(d Downloader, url string, n int) ([]string, error) {
 	var (
 		linksRemaining = n
 		page           = url
