@@ -158,6 +158,8 @@ func TestThatAppCanBeRunIfConfigurationIsOk(t *testing.T) {
 		DstDir:   "./images",
 		Quantity: 15,
 	}
+	//TODO: Avoid this
+	tearDown()
 
 	err := RunApp(c)
 

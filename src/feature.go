@@ -116,13 +116,8 @@ func SaveImages(images []Image, dir string) ([]string, error) {
 	for i, img := range images {
 		filePath := fmt.Sprintf("%s/%d.jpg", dstPath, i+1)
 
-		f, err := os.Create(filePath)
-		if err != nil {
-			return nil, err
-		}
-		defer f.Close()
+		err := SaveImage(img, filePath)
 
-		_, err = f.Write(img)
 		if err != nil {
 			return nil, err
 		}
@@ -131,4 +126,19 @@ func SaveImages(images []Image, dir string) ([]string, error) {
 	}
 
 	return filePaths, nil
+}
+
+func SaveImage(img Image, filePath string) error {
+	f, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = f.Write(img)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
