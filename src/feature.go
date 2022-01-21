@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"sync"
 )
 
 type (
@@ -15,6 +16,7 @@ type (
 	Image []byte
 
 	Config struct {
+		Goroutines  int
 		ImgQuantity int
 		BaseURL     string
 		DstDir      string
@@ -33,11 +35,13 @@ func RunApp(c Config) error {
 		linksChannel chan interface{}
 	)
 
+	log.Printf("Creating dir %s ...\n", c.DstDir)
 	err := CreateDir(c.DstDir)
 	if err != nil {
 		return err
 	}
 
+	log.Printf("Parsing images links...\n")
 	links, err = c.Extractor.ImagesLinks(c.DLoader, c.BaseURL, c.ImgQuantity)
 	if err != nil {
 		return err
@@ -45,8 +49,10 @@ func RunApp(c Config) error {
 
 	linksChannel = c.Extractor.ImagesLinksChannel(links)
 
+	log.Printf("Downloading...\n")
 	imagesPaths := Process(
 		linksChannel,
+		c.Goroutines,
 		func(link interface{}, out chan interface{}, index int) {
 			img, err := DownloadImage(link.(string), c.DLoader)
 			if err != nil {
@@ -64,15 +70,33 @@ func RunApp(c Config) error {
 
 func Process(
 	in chan interface{},
+	goroutines int,
 	routine func(interface{}, chan interface{}, int),
 ) chan interface{} {
-	n := cap(in)
+	var (
+		n   = cap(in)
+		wg  = new(sync.WaitGroup)
+		out = make(chan interface{}, n)
+	)
 
-	out := make(chan interface{}, n)
-	for i := 0; i < n; i++ {
-		value := <-in
-		go routine(value, out, i)
-	}
+	go func() { //goroutine to allowed paths being shown while they are downloaded
+		for i := 0; i < n; {
+			wg.Add(goroutines)
+
+			for t := 0; t < goroutines; t++ {
+				index := i
+				v := <-in
+				go func() {
+					routine(v, out, index)
+					wg.Done()
+				}()
+
+				i++
+			}
+
+			wg.Wait()
+		}
+	}()
 
 	return out
 }

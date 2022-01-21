@@ -15,7 +15,14 @@ func main() {
 	}
 
 	flag.IntVar(&appConfig.ImgQuantity, "amount", 10, "Default quantity 10")
+	flag.IntVar(&appConfig.Goroutines, "threads", 5, "Default quantity 5")
 	flag.Parse()
+
+	if appConfig.Goroutines > 5 || appConfig.Goroutines < 1 {
+		log.Fatal("max threads allowed [1 - 5]")
+		os.Exit(-1)
+
+	}
 
 	err := RunApp(appConfig)
 	if err != nil {
