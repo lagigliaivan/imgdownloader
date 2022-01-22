@@ -140,6 +140,8 @@ func (e ImgLinksExtractor) GetImgInfo(d Downloader, baseURL string, imagesQuanti
 	)
 
 	for pageNumber := 2; linksRemaining > 0; pageNumber++ {
+		log.Printf("searching in page:%s\n", page)
+
 		webContent, err := downloadWebContent(page, d)
 		if err != nil {
 			return nil, err
@@ -148,13 +150,8 @@ func (e ImgLinksExtractor) GetImgInfo(d Downloader, baseURL string, imagesQuanti
 		l := e.links(webContent, linksRemaining)
 
 		if len(l) == 0 {
-			return nil, errors.New("no more links")
+			return nil, errors.New("no more images")
 		}
-
-		log.Printf("searching in page:%s\n", page)
-		// 		for _, li := range l {
-		// 			fmt.Printf("link: %s\n", li)
-		// 		}
 
 		links = append(links, l...)
 
