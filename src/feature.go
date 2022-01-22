@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -41,31 +42,41 @@ func RunApp(c Config) error {
 		return err
 	}
 
-	log.Printf("Parsing images links...\n")
-	links, err = c.Extractor.ImagesData(c.DLoader, c.BaseURL, c.ImgQuantity)
+	log.Printf("Finding images links...\n")
+	links, err = c.Extractor.GetImgInfo(c.DLoader, c.BaseURL, c.ImgQuantity)
 	if err != nil {
 		return err
 	}
 
-	linksChannel = c.Extractor.ImagesLinksChannel(links)
-
 	log.Printf("Downloading...\n")
-	imagesPaths := Process(
-		linksChannel,
-		c.Goroutines,
+	linksChannel = c.Extractor.GetImagesLinks(links)
+
+	log.Printf("Saving...\n")
+	imagesPaths := StoreImages(linksChannel, c.Goroutines, c.DLoader)
+
+	showImgPaths(imagesPaths)
+
+	return nil
+}
+
+func StoreImages(links chan interface{}, qty int, d Downloader) chan interface{} {
+	return Process(
+		links,
+		qty,
 		func(link interface{}, out chan interface{}, index int) {
-			img, err := DownloadImage(link.(string), c.DLoader)
+			img, err := downloadImage(link.(string), d)
 			if err != nil {
 				log.Fatal(err.Error())
 				os.Exit(-1)
 			}
-			storeImage(img, out, index)
+
+			err = storeImage(img, out, index)
+			if err != nil {
+				log.Fatal(err.Error())
+				os.Exit(-1)
+			}
 		},
 	)
-
-	readPaths(imagesPaths)
-
-	return nil
 }
 
 func Process(
@@ -107,53 +118,63 @@ func LinkExtractor() ImgLinksExtractor {
 	}
 }
 
-func (ext ImgLinksExtractor) ImagesLinksChannel(links []string) chan interface{} {
+func (e ImgLinksExtractor) GetImagesLinks(links []string) chan interface{} {
 	const urlRegexGroup = 1
 	outLinks := make(chan interface{}, len(links))
 
 	for _, s := range links {
 		link := s
 		go func() {
-			outLinks <- ext.r.FindStringSubmatch(link)[urlRegexGroup]
+			outLinks <- e.r.FindStringSubmatch(link)[urlRegexGroup]
 		}()
 	}
 
 	return outLinks
 }
 
-func (ext ImgLinksExtractor) links(content []byte, quantity int) []string {
-	return ext.r.FindAllString(string(content), quantity)
-}
-
-func (ext ImgLinksExtractor) ImagesData(d Downloader, url string, n int) ([]string, error) {
+func (e ImgLinksExtractor) GetImgInfo(d Downloader, baseURL string, imagesQuantity int) ([]string, error) {
 	var (
-		linksRemaining = n
-		page           = url
+		page           = baseURL
 		links          []string
+		linksRemaining = imagesQuantity
 	)
 
 	for pageNumber := 2; linksRemaining > 0; pageNumber++ {
-		webContent, err := WebContent(page, d)
+		webContent, err := downloadWebContent(page, d)
 		if err != nil {
 			return nil, err
 		}
 
-		l := ext.links(webContent, linksRemaining)
+		l := e.links(webContent, linksRemaining)
+
+		if len(l) == 0 {
+			return nil, errors.New("no more links")
+		}
+
+		log.Printf("searching in page:%s\n", page)
+		// 		for _, li := range l {
+		// 			fmt.Printf("link: %s\n", li)
+		// 		}
+
 		links = append(links, l...)
 
-		linksRemaining = n - len(links)
+		linksRemaining = imagesQuantity - len(links)
 
-		page = fmt.Sprintf("%spage/%d", url, pageNumber)
+		page = fmt.Sprintf("%spage/%d", baseURL, pageNumber)
 	}
 
 	return links, nil
 }
 
-func DownloadImage(link string, d Downloader) (Image, error) {
+func (e ImgLinksExtractor) links(content []byte, quantity int) []string {
+	return e.r.FindAllString(string(content), quantity)
+}
+
+func downloadImage(link string, d Downloader) (Image, error) {
 	return d.Download(link)
 }
 
-func WebContent(link string, d Downloader) ([]byte, error) {
+func downloadWebContent(link string, d Downloader) ([]byte, error) {
 	return d.Download(link)
 }
 
@@ -183,15 +204,20 @@ func SaveImage(img Image, filePath string) error {
 	return nil
 }
 
-func readPaths(paths chan interface{}) {
+func showImgPaths(paths chan interface{}) {
 	for i := 0; i < cap(paths); i++ {
 		p := <-paths
 		log.Printf("%s\n", p)
 	}
 }
 
-func storeImage(v Image, out chan interface{}, index int) {
+func storeImage(v Image, out chan interface{}, index int) error {
 	imgPath := fmt.Sprintf("./images/%d.jpg", index)
-	SaveImage(v, imgPath)
+	err := SaveImage(v, imgPath)
+	if err != nil {
+		return err
+	}
+
 	out <- imgPath
+	return nil
 }

@@ -21,7 +21,6 @@ func main() {
 	if appConfig.Goroutines > 5 || appConfig.Goroutines < 1 {
 		log.Fatal("max threads allowed [1 - 5]")
 		os.Exit(-1)
-
 	}
 
 	err := RunApp(appConfig)

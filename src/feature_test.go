@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,10 +35,9 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 func TestThatHTTPContentCanBeDownloaded(t *testing.T) {
-	url := ""
 	d := mock(img)
 
-	content, err := d.Download(url)
+	content, err := d.Download(baseURL)
 	assert.NoError(t, err)
 
 	assert.NotEmpty(t, content)
@@ -53,10 +53,22 @@ func TestAnErrorIsReturnedWhenHTTPContentCannotBeDownloaded(t *testing.T) {
 	assert.Nil(t, content)
 }
 
+func TestThatImagesLinksCanBeFound(t *testing.T) {
+	content, err := homePageStub(1)
+
+	assert.NoError(t, err)
+
+	ext := LinkExtractor()
+	links := ext.links(content, all)
+
+	assert.NotEmpty(t, links)
+	assert.Equal(t, 27, len(links))
+}
+
 func TestThatImagesCanBeFoundInAWebContent(t *testing.T) {
 	ext := LinkExtractor()
 
-	links, err := ext.ImagesData(mock(img), baseURL, all)
+	links, err := ext.GetImgInfo(mock(img), baseURL, all)
 
 	assert.NotEmpty(t, links)
 	assert.NoError(t, err)
@@ -66,13 +78,13 @@ func TestThatImagesCanBeFoundInAWebContent(t *testing.T) {
 func TestThatImagesCanBeDownloaded(t *testing.T) {
 	ext := LinkExtractor()
 
-	links, err := ext.ImagesData(mock(img), baseURL, all)
+	links, err := ext.GetImgInfo(mock(img), baseURL, all)
 	assert.NoError(t, err)
 
-	linksChannel := ext.ImagesLinksChannel(links)
+	linksChannel := ext.GetImagesLinks(links)
 
 	for l := range linksChannel {
-		img, err := DownloadImage(l.(string), mock(img))
+		img, err := downloadImage(l.(string), mock(img))
 		assert.NoError(t, err)
 		assert.NotNil(t, img)
 		return
@@ -118,25 +130,26 @@ type downloaderMock struct {
 }
 
 func (d *downloaderMock) Download(src string) ([]byte, error) {
-	if src == baseURL {
-		return homePageStub(1)
+
+	if strings.Contains(src, "https://i.chzbgr.com/") {
+		return d.b, nil
 	}
 
-	if src == fmt.Sprintf("%s/page/2", baseURL) {
+	switch src {
+	case baseURL:
+		return homePageStub(1)
+
+	case fmt.Sprintf("%s/page/2", baseURL):
 		d.lastPage = 2
 		return homePageStub(2)
-	}
 
-	if src == fmt.Sprintf("%s/page/3", baseURL) {
+	case fmt.Sprintf("%s/page/3", baseURL):
 		d.lastPage = 3
 		return homePageStub(3)
-	}
 
-	if len(d.b) == 0 {
+	default:
 		return nil, fmt.Errorf("empty content")
 	}
-
-	return d.b, nil
 }
 
 func homePageStub(page int) ([]byte, error) {
