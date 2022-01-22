@@ -68,7 +68,7 @@ func TestThatImagesLinksCanBeFound(t *testing.T) {
 func TestThatImagesCanBeFoundInAWebContent(t *testing.T) {
 	ext := LinkExtractor()
 
-	links, err := ext.GetImgInfo(mock(img), baseURL, all)
+	links, err := ext.FindImages(mock(img), baseURL, all)
 
 	assert.NotEmpty(t, links)
 	assert.NoError(t, err)
@@ -78,7 +78,7 @@ func TestThatImagesCanBeFoundInAWebContent(t *testing.T) {
 func TestThatImagesCanBeDownloaded(t *testing.T) {
 	ext := LinkExtractor()
 
-	links, err := ext.GetImgInfo(mock(img), baseURL, all)
+	links, err := ext.FindImages(mock(img), baseURL, all)
 	assert.NoError(t, err)
 
 	linksChannel := ext.GetImagesLinks(links)

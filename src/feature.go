@@ -43,15 +43,15 @@ func RunApp(c Config) error {
 	}
 
 	log.Printf("Finding images links...\n")
-	links, err = c.Extractor.GetImgInfo(c.DLoader, c.BaseURL, c.ImgQuantity)
+	links, err = c.Extractor.FindImages(c.DLoader, c.BaseURL, c.ImgQuantity)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Downloading...\n")
+	log.Printf("Parsing links...\n")
 	linksChannel = c.Extractor.GetImagesLinks(links)
 
-	log.Printf("Saving...\n")
+	log.Printf("Downloading...\n")
 	imagesPaths := StoreImages(linksChannel, c.Goroutines, c.DLoader)
 
 	showImgPaths(imagesPaths)
@@ -132,7 +132,7 @@ func (e ImgLinksExtractor) GetImagesLinks(links []string) chan interface{} {
 	return outLinks
 }
 
-func (e ImgLinksExtractor) GetImgInfo(d Downloader, baseURL string, imagesQuantity int) ([]string, error) {
+func (e ImgLinksExtractor) FindImages(d Downloader, baseURL string, imagesQuantity int) ([]string, error) {
 	var (
 		page           = baseURL
 		links          []string
