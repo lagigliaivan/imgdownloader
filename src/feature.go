@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"regexp"
+	"sync"
 )
 
 type (
@@ -15,120 +17,204 @@ type (
 	Image []byte
 
 	Config struct {
-		D        Downloader
-		BaseURL  string
-		DstDir   string
-		Quantity int
+		Goroutines  int
+		ImgQuantity int
+		BaseURL     string
+		DstDir      string
+		DLoader     Downloader
+		Extractor   ImgLinksExtractor
+	}
+
+	ImgLinksExtractor struct {
+		r *regexp.Regexp
 	}
 )
 
 func RunApp(c Config) error {
-	images, err := StartImagesDownload(c.D, c.BaseURL, c.Quantity)
+	var (
+		links        []string
+		linksChannel chan interface{}
+	)
+
+	log.Printf("Creating dir %s ...\n", c.DstDir)
+	err := CreateDir(c.DstDir)
 	if err != nil {
 		return err
 	}
 
-	paths, err := SaveImages(images, c.DstDir)
+	log.Printf("Finding images links...\n")
+	links, err = c.Extractor.FindImages(c.DLoader, c.BaseURL, c.ImgQuantity)
 	if err != nil {
 		return err
 	}
 
-	for _, p := range paths {
-		log.Printf("%s\n", p)
+	log.Printf("Parsing links...\n")
+	linksChannel = c.Extractor.GetImagesLinks(links)
+
+	log.Printf("Downloading...\n")
+	imagesPaths := StoreImages(linksChannel, c.Goroutines, c.DLoader)
+
+	showImgPaths(imagesPaths)
+
+	return nil
+}
+
+func CreateDir(dirName string) error {
+	dstPath := fmt.Sprintf("./%s", dirName)
+
+	err := os.Mkdir(dstPath, 0755)
+	if err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func StartImagesDownload(d Downloader, baseURL string, imgQuantity int) ([]Image, error) {
-	const secondPage = 2
+func StoreImages(links chan interface{}, qty int, d Downloader) chan interface{} {
+	return Process(
+		links,
+		qty,
+		func(link interface{}, out chan interface{}, index int) {
+			img, err := downloadImage(link.(string), d)
+			if err != nil {
+				log.Fatal(err.Error())
+				os.Exit(-1)
+			}
 
-	links, err := ImagesLinks(d, baseURL, imgQuantity)
-	if err != nil {
-		return nil, err
+			err = storeImage(img, out, index)
+			if err != nil {
+				log.Fatal(err.Error())
+				os.Exit(-1)
+			}
+		},
+	)
+}
+
+func LinkExtractor() ImgLinksExtractor {
+	return ImgLinksExtractor{
+		r: regexp.MustCompile(`<img class="resp-media.*" src="data:image.* data-src="(?P<url>https://.*?)" .*`),
+	}
+}
+
+func (e ImgLinksExtractor) GetImagesLinks(links []string) chan interface{} {
+	const urlRegexGroup = 1
+	outLinks := make(chan interface{}, len(links))
+
+	for _, s := range links {
+		link := s
+		go func() {
+			outLinks <- e.r.FindStringSubmatch(link)[urlRegexGroup]
+		}()
 	}
 
-	for i := secondPage; len(links) < imgQuantity; i++ {
-		log.Printf("getting page %d\n", i)
+	return outLinks
+}
 
-		remainingImages := (imgQuantity - len(links))
+func (e ImgLinksExtractor) FindImages(d Downloader, baseURL string, imagesQuantity int) ([]string, error) {
+	var (
+		page           = baseURL
+		links          []string
+		linksRemaining = imagesQuantity
+	)
 
-		l, err := ImagesLinks(d, fmt.Sprintf("%s/page/%d", baseURL, i), remainingImages)
+	for pageNumber := 2; linksRemaining > 0; pageNumber++ {
+		log.Printf("searching in page:%s\n", page)
+
+		webContent, err := downloadWebContent(page, d)
 		if err != nil {
 			return nil, err
+		}
+
+		l := e.links(webContent, linksRemaining)
+
+		if len(l) == 0 {
+			return nil, errors.New("no more images")
 		}
 
 		links = append(links, l...)
+
+		linksRemaining = imagesQuantity - len(links)
+
+		page = fmt.Sprintf("%spage/%d", baseURL, pageNumber)
 	}
 
-	return DownloadImages(links, d)
+	return links, nil
 }
 
-func ImagesLinks(d Downloader, url string, quantity int) ([]string, error) {
-	webContent, err := d.Download(url)
+func (e ImgLinksExtractor) links(content []byte, quantity int) []string {
+	return e.r.FindAllString(string(content), quantity)
+}
+
+func Process(
+	in chan interface{},
+	goroutines int,
+	routine func(interface{}, chan interface{}, int),
+) chan interface{} {
+	var (
+		n   = cap(in)
+		wg  = new(sync.WaitGroup)
+		out = make(chan interface{}, n)
+	)
+
+	go func() { //goroutine to allowed paths being shown while they are downloaded
+		for i := 0; i < n; {
+			wg.Add(goroutines)
+
+			for t := 0; t < goroutines; t++ {
+				index := i
+				v := <-in
+				go func() {
+					routine(v, out, index)
+					wg.Done()
+				}()
+
+				i++
+			}
+
+			wg.Wait()
+		}
+	}()
+
+	return out
+}
+
+func downloadImage(link string, d Downloader) (Image, error) {
+	return d.Download(link)
+}
+
+func downloadWebContent(link string, d Downloader) ([]byte, error) {
+	return d.Download(link)
+}
+
+func SaveImage(img Image, filePath string) error {
+	f, err := os.Create(filePath)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	defer f.Close()
 
-	return ExtractImagesLinks(webContent, quantity), nil
-
-}
-
-func ExtractImagesLinks(content []byte, n int) []string {
-	url := 1
-	var result []string
-	r := regexp.MustCompile(`<img class="resp-media.*" src="data:image.* data-src="(?P<url>https://.*?)" .*`)
-
-	links := r.FindAllString(string(content), n)
-	for _, s := range links {
-		l := r.FindStringSubmatch(s)
-		result = append(result, l[url])
-	}
-
-	return result
-}
-
-func DownloadImages(links []string, d Downloader) ([]Image, error) {
-	var images []Image
-
-	for _, l := range links {
-		content, err := d.Download(l)
-		if err != nil {
-			return nil, err
-		}
-
-		images = append(images, Image(content))
-	}
-
-	return images, nil
-}
-
-func SaveImages(images []Image, dir string) ([]string, error) {
-	var filePaths []string
-
-	dstPath := fmt.Sprintf("./%s", dir)
-
-	err := os.Mkdir(dstPath, 0755)
+	_, err = f.Write(img)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	for i, img := range images {
-		filePath := fmt.Sprintf("%s/%d.jpg", dstPath, i+1)
+	return nil
+}
 
-		f, err := os.Create(filePath)
-		if err != nil {
-			return nil, err
-		}
-		defer f.Close()
+func showImgPaths(paths chan interface{}) {
+	for i := 0; i < cap(paths); i++ {
+		p := <-paths
+		log.Printf("%s\n", p)
+	}
+}
 
-		_, err = f.Write(img)
-		if err != nil {
-			return nil, err
-		}
-
-		filePaths = append(filePaths, filePath)
+func storeImage(v Image, out chan interface{}, index int) error {
+	imgPath := fmt.Sprintf("./images/%d.jpg", index)
+	err := SaveImage(v, imgPath)
+	if err != nil {
+		return err
 	}
 
-	return filePaths, nil
+	out <- imgPath
+	return nil
 }
