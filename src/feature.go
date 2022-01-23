@@ -59,6 +59,17 @@ func RunApp(c Config) error {
 	return nil
 }
 
+func CreateDir(dirName string) error {
+	dstPath := fmt.Sprintf("./%s", dirName)
+
+	err := os.Mkdir(dstPath, 0755)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func StoreImages(links chan interface{}, qty int, d Downloader) chan interface{} {
 	return Process(
 		links,
@@ -77,39 +88,6 @@ func StoreImages(links chan interface{}, qty int, d Downloader) chan interface{}
 			}
 		},
 	)
-}
-
-func Process(
-	in chan interface{},
-	goroutines int,
-	routine func(interface{}, chan interface{}, int),
-) chan interface{} {
-	var (
-		n   = cap(in)
-		wg  = new(sync.WaitGroup)
-		out = make(chan interface{}, n)
-	)
-
-	go func() { //goroutine to allowed paths being shown while they are downloaded
-		for i := 0; i < n; {
-			wg.Add(goroutines)
-
-			for t := 0; t < goroutines; t++ {
-				index := i
-				v := <-in
-				go func() {
-					routine(v, out, index)
-					wg.Done()
-				}()
-
-				i++
-			}
-
-			wg.Wait()
-		}
-	}()
-
-	return out
 }
 
 func LinkExtractor() ImgLinksExtractor {
@@ -167,23 +145,45 @@ func (e ImgLinksExtractor) links(content []byte, quantity int) []string {
 	return e.r.FindAllString(string(content), quantity)
 }
 
+func Process(
+	in chan interface{},
+	goroutines int,
+	routine func(interface{}, chan interface{}, int),
+) chan interface{} {
+	var (
+		n   = cap(in)
+		wg  = new(sync.WaitGroup)
+		out = make(chan interface{}, n)
+	)
+
+	go func() { //goroutine to allowed paths being shown while they are downloaded
+		for i := 0; i < n; {
+			wg.Add(goroutines)
+
+			for t := 0; t < goroutines; t++ {
+				index := i
+				v := <-in
+				go func() {
+					routine(v, out, index)
+					wg.Done()
+				}()
+
+				i++
+			}
+
+			wg.Wait()
+		}
+	}()
+
+	return out
+}
+
 func downloadImage(link string, d Downloader) (Image, error) {
 	return d.Download(link)
 }
 
 func downloadWebContent(link string, d Downloader) ([]byte, error) {
 	return d.Download(link)
-}
-
-func CreateDir(dirName string) error {
-	dstPath := fmt.Sprintf("./%s", dirName)
-
-	err := os.Mkdir(dstPath, 0755)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func SaveImage(img Image, filePath string) error {
